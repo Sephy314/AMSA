@@ -1,90 +1,176 @@
-# 🧠 AMSA (Actor-Micro System Architecture)
+# 🧠 AMSA (Actor Micro System Architecture)
 
-## Conceptual Architecture Specification (Prototype-free)
-
----
-
-# 0. Abstract
-
-**AMSA (Actor-Micro System Architecture)** is a control-plane-based execution architecture that removes the traditional model of always-running services and replaces it with **dynamically generated actor-based execution units (Labori)** created per request.
-
-AMSA structurally separates:
-
-- Execution Decision
-- Execution Orchestration
-- Execution Runtime
-
-This allows strict isolation, reduced system coupling, and controlled execution flow via a central control plane.
+**Conceptual Architecture Specification (Prototype-free)**  
+A control-plane-inspired execution architecture for distributed systems.
 
 ---
 
-# 1. Design Motivation
+## 📌 Overview
 
-## 1.1 Limitations of Modern Microservice Architectures
+AMSA (Actor Micro System Architecture) is a conceptual distributed execution model that rethinks traditional microservice design by decoupling execution from long-running services.
 
-Modern MSA systems suffer from structural issues:
+Instead of persistent service instances, AMSA introduces a **request-driven execution model**, where each request is transformed into a dynamically managed execution flow composed of lightweight actor units called **Labori**.
 
-- Always-running service processes increase resource overhead
-- Strong network coupling between services
-- Large blast radius when failures occur
-- Deployment unit ≠ execution unit mismatch
-- High operational complexity (observability, scaling, tracing)
+The architecture introduces a strict separation between:
 
----
-
-## 1.2 Goals of AMSA
-
-AMSA aims to solve these issues through:
-
-- Dynamic creation of execution units
-- Centralized control-plane execution decisions
-- Lightweight actor-based runtime model
-- Strict separation of routing, decision, and execution
-- Failure containment via isolated execution contexts
+- Routing
+- Decision-making (control plane)
+- Execution orchestration
+- Execution runtime
 
 ---
 
-# 2. Core Concepts
+## 🎯 Motivation
+
+Modern microservice architectures (MSA) suffer from several structural limitations:
+
+- Persistent service processes increase operational overhead
+- Tight coupling between deployment units and execution logic
+- Cascading failures across service boundaries
+- Complex observability and scaling requirements
+
+Actor-based systems and serverless architectures partially address these issues, but still lack a unified control-plane-driven execution abstraction.
+
+AMSA is proposed as a conceptual model to explore this design space.
 
 ---
 
-## 2.1 Control Plane Driven Execution
+## 🧩 Core Concepts
 
-In AMSA, execution is never directly invoked.
+### 1. Control-Plane Driven Execution
 
-> **Execution always results from a control-plane decision, not a direct request.**
+Execution is not directly invoked by clients or services. Instead, it is always the result of a control-plane decision process.
 
-This ensures:
-
-- Centralized governance of execution flow
-- Deterministic orchestration
-- Policy-based execution control
+> Execution is a consequence of orchestration, not direct invocation.
 
 ---
 
-## 2.2 Actor-based Execution Unit (Labori)
+### 2. Actor-Based Execution Unit (Labori)
 
-The smallest execution unit in AMSA is called **Labori**.
+Labori is the minimal execution unit in AMSA.
 
-### Definition
+Characteristics:
 
-> A Labori is a lightweight actor that processes a single logical unit of work inside an isolated execution context.
-
-### Properties:
-
-- Created per request or dynamically allocated
-- Message-driven execution model
-- Independent execution context
+- Dynamically created per request
+- Isolated execution context
+- Message-driven processing model
 - Ephemeral or pooled lifecycle
 
 ---
 
-## 2.3 Layered Execution Architecture
+### 3. Layered Execution Model
 
-AMSA is structured into four layers:
+AMSA defines a strict layered architecture:
+
+- Edge Routing Layer
+- Control Decision Layer
+- Execution Orchestration Layer
+- Execution Layer (Actors)
+
+---
+
+## 🏗️ System Architecture
+
+### 1. Edge Routing Layer (Vergilius)
+
+The entry layer responsible for handling external requests.
+
+Responsibilities:
+
+- Request ingestion
+- Traffic filtering (WAF-like behavior)
+- Load distribution
+- Forwarding to control plane
+
+Properties:
+
+- Stateless
+- No business logic
+- No execution responsibility
+
+---
+
+### 2. Control Decision Layer (Superior)
+
+The control plane of AMSA.
+
+Responsibilities:
+
+- Request interpretation
+- Service mapping decisions
+- Execution policy evaluation
+- Routing decisions for execution
+
+Properties:
+
+- Stateless
+- Multi-instance scalable
+- Pure decision engine (no execution)
+
+---
+
+### 3. Execution Orchestration Layer
+
+Responsible for managing execution lifecycle.
+
+Responsibilities:
+
+- Actor creation and lifecycle management
+- Execution scheduling
+- Resource allocation
+- Failure handling and retries
+
+Properties:
+
+- Execution manager, not decision maker
+
+---
+
+### 4. Execution Layer (Labori)
+
+Labori is the core execution unit.
+
+Definition:
+
+> A lightweight, isolated execution entity that processes a single logical unit of work within a controlled runtime context.
+
+Responsibilities:
+
+- Business logic execution
+- Data processing (e.g., CRUD operations)
+- Result generation
+
+Properties:
+
+- Ephemeral
+- Isolated execution context
+- Request-scoped lifecycle
+
+---
+
+## 🔐 Internal Execution Path (VIP Path)
+
+The VIP Path is a conceptual secure execution channel between control and execution layers.
+
+It represents:
+
+- Trusted internal communication boundary
+- Controlled execution routing path
+- Separation between decision and execution domains
+
+---
+
+## 🔁 Execution Flow
 
 ```text
-Routing Layer
-Decision Layer
+Client
+  ↓
+Edge Routing Layer (Vergilius)
+  ↓
+Control Decision Layer (Superior)
+  ↓
 Execution Orchestration Layer
-Execution Layer (Actor)
+  ↓
+Execution Layer (Labori)
+  ↓
+Response Propagation
