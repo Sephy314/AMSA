@@ -1,176 +1,182 @@
-# 🧠 AMSA (Actor Micro System Architecture)
+# AMSA (Actor Micro System Architecture)
 
-**Conceptual Architecture Specification (Prototype-free)**  
-A control-plane-inspired execution architecture for distributed systems.
-
----
-
-## 📌 Overview
-
-AMSA (Actor Micro System Architecture) is a conceptual distributed execution model that rethinks traditional microservice design by decoupling execution from long-running services.
-
-Instead of persistent service instances, AMSA introduces a **request-driven execution model**, where each request is transformed into a dynamically managed execution flow composed of lightweight actor units called **Labori**.
-
-The architecture introduces a strict separation between:
-
-- Routing
-- Decision-making (control plane)
-- Execution orchestration
-- Execution runtime
+> **MSA + Control Plane + Actor Execution Model**
+>
+> Instead of keeping services always running, AMSA delegates request processing to execution units called Actors.
 
 ---
 
-## 🎯 Motivation
+## Why AMSA?
 
-Modern microservice architectures (MSA) suffer from several structural limitations:
+In typical MSA, service instances must always be alive.
 
-- Persistent service processes increase operational overhead
-- Tight coupling between deployment units and execution logic
-- Cascading failures across service boundaries
-- Complex observability and scaling requirements
+```
+Auth Service  × 10
+Post Service  × 10
+Chat Service  × 10
+```
 
-Actor-based systems and serverless architectures partially address these issues, but still lack a unified control-plane-driven execution abstraction.
+They consume memory and CPU even with no traffic.
 
-AMSA is proposed as a conceptual model to explore this design space.
+AMSA changes the idea:
 
----
-
-## 🧩 Core Concepts
-
-### 1. Control-Plane Driven Execution
-
-Execution is not directly invoked by clients or services. Instead, it is always the result of a control-plane decision process.
-
-> Execution is a consequence of orchestration, not direct invocation.
+> "Services only maintain management units. Actual request processing is handled by Actors (Labori)."
 
 ---
 
-### 2. Actor-Based Execution Unit (Labori)
+## Architecture Overview
 
-Labori is the minimal execution unit in AMSA.
-
-Characteristics:
-
-- Dynamically created per request
-- Isolated execution context
-- Message-driven processing model
-- Ephemeral or pooled lifecycle
-
----
-
-### 3. Layered Execution Model
-
-AMSA defines a strict layered architecture:
-
-- Edge Routing Layer
-- Control Decision Layer
-- Execution Orchestration Layer
-- Execution Layer (Actors)
-
----
-
-## 🏗️ System Architecture
-
-### 1. Edge Routing Layer (Vergilius)
-
-The entry layer responsible for handling external requests.
-
-Responsibilities:
-
-- Request ingestion
-- Traffic filtering (WAF-like behavior)
-- Load distribution
-- Forwarding to control plane
-
-Properties:
-
-- Stateless
-- No business logic
-- No execution responsibility
-
----
-
-### 2. Control Decision Layer (Superior)
-
-The control plane of AMSA.
-
-Responsibilities:
-
-- Request interpretation
-- Service mapping decisions
-- Execution policy evaluation
-- Routing decisions for execution
-
-Properties:
-
-- Stateless
-- Multi-instance scalable
-- Pure decision engine (no execution)
-
----
-
-### 3. Execution Orchestration Layer
-
-Responsible for managing execution lifecycle.
-
-Responsibilities:
-
-- Actor creation and lifecycle management
-- Execution scheduling
-- Resource allocation
-- Failure handling and retries
-
-Properties:
-
-- Execution manager, not decision maker
-
----
-
-### 4. Execution Layer (Labori)
-
-Labori is the core execution unit.
-
-Definition:
-
-> A lightweight, isolated execution entity that processes a single logical unit of work within a controlled runtime context.
-
-Responsibilities:
-
-- Business logic execution
-- Data processing (e.g., CRUD operations)
-- Result generation
-
-Properties:
-
-- Ephemeral
-- Isolated execution context
-- Request-scoped lifecycle
-
----
-
-## 🔐 Internal Execution Path (VIP Path)
-
-The VIP Path is a conceptual secure execution channel between control and execution layers.
-
-It represents:
-
-- Trusted internal communication boundary
-- Controlled execution routing path
-- Separation between decision and execution domains
-
----
-
-## 🔁 Execution Flow
-
-```text
+```
 Client
-  ↓
-Edge Routing Layer (Vergilius)
-  ↓
-Control Decision Layer (Superior)
-  ↓
-Execution Orchestration Layer
-  ↓
-Execution Layer (Labori)
-  ↓
-Response Propagation
+   │
+   ▼
+Vergilius          ← Entry point (HTTP, TLS, Rate Limiting)
+   │
+   ▼
+Supervisor         ← Control Plane (Routing, LB, Stateless)
+   │
+   ▼
+Service            ← Independent deployment unit (replicable per server)
+ ├─ Service Manager   ← Labori management, Blue-Green deployment
+ └─ Labori            ← Actor-based execution unit
+      ├─ Active    ← Request processor (sole handler, async)
+      └─ Idle      ← Hot standby (fault recovery only)
+```
+
+---
+
+## Core Components
+
+### Vergilius
+The outermost entry point.
+
+- HTTP ingress / TLS termination
+- Rate Limiting
+- **Decides which Supervisor to route to (Supervisor LB)**
+- No business logic
+
+---
+
+### Supervisor
+The Control Plane of AMSA. Never processes requests directly.
+
+- **Fully Stateless** — holds no service state
+- Service discovery and **Service LB (load balancing)**
+- Async request forwarding and response delivery
+- Horizontally scalable by replicating Supervisor instances
+
+---
+
+### Service
+The distributed unit of AMSA. **Replicated per server** to scale out.
+
+```
+Server A  →  Post Service (Service Manager + Labori)
+Server B  →  Post Service (Service Manager + Labori)
+Server C  →  Post Service (Service Manager + Labori)
+```
+
+Supervisor handles LB across instances. Even if a slow request occupies one instance, others remain available for distribution.
+
+---
+
+### Service Manager
+The internal manager of a Service.
+
+- Labori creation / termination
+- State monitoring
+- **Blue-Green deployment** management and rollback
+
+---
+
+### Labori
+The core of AMSA. An Actor-based execution unit.
+
+- **Async processing is the core philosophy** — all requests are handled asynchronously
+- **Always exactly 2 instances** — one Active + one Idle
+- **Only Active can process requests**
+- Idle never handles requests — it exists solely as a hot standby for fault recovery
+
+---
+
+## Labori Lifecycle
+
+### Normal flow
+```
+Idle    → Standby (hot standby, no request handling)
+Active  → Processes requests asynchronously
+```
+
+### On fault
+```
+Active  panics
+   │
+   ▼
+Dead    (memory reclaimed)
+   │
+   ▼
+Idle  → Active  immediate succession  (zero downtime)
+   │
+   ▼
+New Idle created                      (hot standby restored)
+```
+
+No external orchestrator needed. Service Manager handles zero-downtime fault recovery entirely on its own.
+
+---
+
+## Request Flow
+
+```
+Client
+  │  HTTP request
+  ▼
+Vergilius
+  │  Select Supervisor
+  ▼
+Supervisor
+  │  Load balance to Service instance
+  ▼
+Service Manager
+  │  Delegate to Labori
+  ▼
+Active Labori
+  │  Async processing
+  ▼
+Supervisor → Client  response returned
+```
+
+---
+
+## Blue-Green Deployment
+
+Performed internally by the Service Manager.
+
+```
+Service
+ ├─ Blue Labori Pool  ← current version
+ └─ Green Labori Pool ← new version
+
+Blue → Green  switch
+On failure: Green → Blue  rollback
+```
+
+---
+
+## Comparison with Traditional MSA
+
+| | Traditional MSA | AMSA |
+|---|---|---|
+| Execution unit | Service Instance | Labori (Actor) |
+| Control model | Service-centric | Control Plane-centric |
+| Routing | LB + Service | Supervisor |
+| Execution model | Primarily synchronous | **Async by default** |
+| Fault recovery | Depends on external orchestrator | **Service Manager handles internally** |
+| Scale-out | Per service | Replicate entire Service instance |
+| Deployment | Per service | Blue-Green via Service Manager |
+
+---
+
+## One-line Summary
+
+**AMSA is a Control Plane-based Actor-Microservice Architecture where Vergilius receives requests, Supervisor controls routing, Service Manager manages Labori (Actors), and all business logic is executed asynchronously by Labori.**
